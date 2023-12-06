@@ -35,11 +35,9 @@ Accountinfo check_pin(int accountnum, int pinnum) {
 	
 	// file has 1 account per line
 	while (fgets(line, sizeof(line), db) != NULL) {
-		printf("%s\n", line);	
 		char* DBaccountnum = strtok(line, " "); 
 		char* DBaccountpin = strtok(NULL, " ");
 		// use space to seperate values 
-		printf("%i == %i \n", pinnum, atoi(DBaccountpin));
 		if (accountnum == atoi(DBaccountnum) && pinnum == atoi(DBaccountpin)) {
 				
 			strncpy(saved_account.accountnum, DBaccountnum, sizeof(saved_account.accountnum)-1);	
@@ -51,7 +49,7 @@ Accountinfo check_pin(int accountnum, int pinnum) {
 			return saved_account;
 
 		}
-	
+
 	}
 	// implement failure x3 
 	printf("account not found\n");
@@ -76,14 +74,16 @@ float get_balance(Accountinfo account) {
 			balance = atof(strtok(line, " ")); 
 			fclose(db);
 			return balance;
-
 		}
-	
 	}
 	// db changed account? 
 	printf("account has been changed");
+	fclose(db);
 	return -1;
 }
+
+
+
 
 float withdraw(Accountinfo account, int amount) {
 
@@ -91,30 +91,37 @@ float withdraw(Accountinfo account, int amount) {
 	assert(db != NULL);
 	char line[64];	
 	float balance;
-	
+	int cursorpos = ftell(db);	
+	printf("Current file position: %ld\n", ftell(db));
 	// file has 1 account per line
 	while (fgets(line, sizeof(line), db) != NULL) {
 		
-		// use space to seperate values 
+		// use space to seperate values
 		if (atoi(account.accountnum) == atoi(strtok(line, " "))) {
-		
-			strtok(line, " "); // skip pin	
-			balance = atof(strtok(line, " ")); 
-			fclose(db);
+			strtok(NULL, " "); // skip pin
+			balance = atof(strtok(NULL, " "));
 			if (amount > balance) {
+				printf("insufficient funds, cannot withdraw");
+				fclose(db);
 				return -1;
 			} else {
 				balance -= amount;
+				printf("new balance, %f\n", balance);
 				// replace balance here one word ahead 	
-				fprintf(db,"%s %s %f", account.accountnum, account.accountpin, balance); 
+				fseek(db, cursorpos, SEEK_SET);
+				int test = fprintf(db,"%s %s %0.2f", account.accountnum, account.accountpin, balance); 
+				assert(test != -1);
+
+				fclose(db);
 				return balance;
 			}
 
 		}
-	
+		cursorpos = ftell(db);
 	}
 	// db changed account? 
 	printf("account has been changed");
+	fclose(db);
 	return -1;
 }
 
@@ -122,9 +129,9 @@ float withdraw(Accountinfo account, int amount) {
 
 
 int main() {
-	
+
 	Accountinfo a1 = check_pin(11111, 111);		
-	printf("%s %s %0.2f\n", a1.accountnum, a1.accountpin, a1.funds);
-	printf("%f\n", get_balance(a1));
+	printf("%0.2f\n", get_balance(a1));
+	withdraw(a1, 500);
 
 }
