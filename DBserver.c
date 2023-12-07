@@ -15,6 +15,10 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h> 
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <unistd.h>
+
 
 #define FAILED_CHECK (Accountinfo){"", "", -1};
 
@@ -25,6 +29,17 @@ typedef struct {
 	char accountpin[4];
 	float funds;	
 } Accountinfo; 
+
+typedef struct {
+	int accountnum;
+	int accountpin; 
+	float funds;
+	char operation[20];
+} Data;
+typedef struct  {
+	Data data;
+	long type;
+} Message;
 
 Accountinfo check_pin(int accountnum, int pinnum) {
 		
@@ -38,10 +53,12 @@ Accountinfo check_pin(int accountnum, int pinnum) {
 		char* DBaccountnum = strtok(line, " "); 
 		char* DBaccountpin = strtok(NULL, " ");
 		// use space to seperate values 
+		printf("accountnum: %s\n", DBaccountnum);
 		if (accountnum == atoi(DBaccountnum) && pinnum == atoi(DBaccountpin)) {
 				
-			strncpy(saved_account.accountnum, DBaccountnum, sizeof(saved_account.accountnum)-1);	
-			strncpy(saved_account.accountpin, DBaccountpin, sizeof(saved_account.accountpin)-1);
+			strcpy(saved_account.accountnum, DBaccountnum);	
+
+			strcpy(saved_account.accountpin, DBaccountpin);
 			saved_account.funds = atof(strtok(NULL, " "));
 			// msg "OK"
 			fclose(db);
@@ -77,7 +94,7 @@ float get_balance(Accountinfo account) {
 		}
 	}
 	// db changed account? 
-	printf("account has been changed");
+	printf("account has been changed\n");
 	fclose(db);
 	return -1;
 }
@@ -85,14 +102,13 @@ float get_balance(Accountinfo account) {
 
 
 
-float withdraw(Accountinfo account, int amount) {
+float withdraw(Accountinfo account, float amount) {
 
 	FILE* db = fopen(Filename, "r+");	
 	assert(db != NULL);
 	char line[64];	
 	float balance;
 	int cursorpos = ftell(db);	
-	printf("Current file position: %ld\n", ftell(db));
 	// file has 1 account per line
 	while (fgets(line, sizeof(line), db) != NULL) {
 		
@@ -101,37 +117,111 @@ float withdraw(Accountinfo account, int amount) {
 			strtok(NULL, " "); // skip pin
 			balance = atof(strtok(NULL, " "));
 			if (amount > balance) {
-				printf("insufficient funds, cannot withdraw");
+				printf("insufficient funds, cannot withdraw\n");
 				fclose(db);
 				return -1;
 			} else {
 				balance -= amount;
+			
 				printf("new balance, %f\n", balance);
 				// replace balance here one word ahead 	
+				printf("cursorpos: %i\n", cursorpos);
 				fseek(db, cursorpos, SEEK_SET);
-				int test = fprintf(db,"%s %s %0.2f", account.accountnum, account.accountpin, balance); 
+				int test = fprintf(db,"%.5s %.3s %010.01f", account.accountnum, account.accountpin, balance); 
 				assert(test != -1);
 
 				fclose(db);
 				return balance;
 			}
-
 		}
 		cursorpos = ftell(db);
 	}
 	// db changed account? 
-	printf("account has been changed");
+	printf("account has been changed\n");
 	fclose(db);
 	return -1;
+}
+
+void update_DB(int accountnum, int pinnum, float balance) {
+	
+	FILE* db = fopen(Filename, "r+");	
+	assert(db != NULL);
+	char line[64];	
+	int cursorpos = ftell(db);	
+	// file has 1 account per line
+	while (fgets(line, sizeof(line), db) != NULL) {
+		
+		// does account exist?
+		if (accountnum == atoi(strtok(line, " "))) {
+
+			// replace acc, using this cursor method does not account 
+			// for bigger values meaning that the current balance must
+			// be smaller or it no worky	
+			printf("cursorpos: %i\n", cursorpos);
+			fseek(db, cursorpos, SEEK_SET);
+			int test = fprintf(db,"%5i %3i %010.01f", accountnum, pinnum, balance); 
+			assert(test != -1);
+			fclose(db);
+			return;
+		}
+
+		cursorpos = ftell(db);
+	}
+	// account does not exist 
+	int test = fprintf(db,"%5i %3i %011.02f", accountnum, pinnum, balance); 			
+	assert(test != -1);
+	fclose(db);
 }
 
 
 
 
+
+
+
+
 int main() {
+	key_t key = ftok("DBserver.c", 'A');
+	if (key == -1) {
+		perror("ftok");
+		exit(EXIT_FAILURE);
+	}
 
-	Accountinfo a1 = check_pin(11111, 111);		
-	printf("%0.2f\n", get_balance(a1));
-	withdraw(a1, 500);
+	int msgid = msgget(key, IPC_CREAT | 0666 | IPC_CREAT);
+	if (msgid == -1) {
+		perror("msgget");
+		exit(EXIT_FAILURE);
+	}
 
+	Message msg;
+
+
+	while(1){
+
+		Message msg;
+		printf("waiting\n");
+		if (msgrcv(msgid, &msg, sizeof(msg), 1, 0) == -1) {
+			perror("msgrcv");
+			exit(EXIT_FAILURE);
+		}
+
+		printf("%s\n", msg.data.operation);
+		/*
+		   if (strcmp("PIN", msg.operation) == 0) {
+
+		   } else if (strcmp("BALANCE", msg.operation) == 0) {
+
+		//get_balance((Accountinfo){msg.accountnum, msg.accountpin, msg.funds});		
+		} else if (strcmp("WITHDRAW", msg.operation) == 0){
+
+		} else if (strcmp("UPDATE_DB", msg.operation) == 0) {
+
+		} else {
+		// not operation
+		perror("not an operation");
+		exit(EXIT_FAILURE);
+		}
+		*/
+	}		
+	msgctl(msgid, IPC_RMID, NULL);
 }
