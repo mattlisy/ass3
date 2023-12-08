@@ -6,20 +6,16 @@
 #include <unistd.h>
 
 typedef struct {
-	int accountnum;
-	int accountpin;
-	float funds;
-	char operations[20];
-} Data;
-
-typedef struct {
-	Data data;
 	long type;
+	unsigned int accountnum;
+	unsigned int accountpin;
+	float funds;
+	char operation[20];
 } Message;
 
 int main() {
 	int accountnum = 1;
-	int accountpin = 1;
+	unsigned int accountpin = 1;
 	float accountbalance = 1;
 
 	key_t key = ftok("DBserver.c", 'A');
@@ -38,11 +34,10 @@ int main() {
 	Message msg;
 	msg.type = 1;
 
-
 	while(1) {
 
 		Message msg;
-		printf("account number: ");
+		printf("account number(negative to exit): ");
 		scanf("%5d", &accountnum);		
 
 		while(getchar() != '\n');		
@@ -50,6 +45,7 @@ int main() {
 		if (accountnum < 0) {
 			break;
 		}
+		
 
 		printf("accountpin: ");
 		scanf("%3d", &accountpin);
@@ -57,16 +53,16 @@ int main() {
 		while(getchar() != '\n');		
 
 		printf("account balance: ");
-		scanf("%11f", &accountbalance);
+		scanf("%f", &accountbalance);
 
 		while(getchar() != '\n');
 
-		printf("%05i %03i %011.2f\n", accountnum, accountpin, accountbalance);
+		printf("%05i %03i %011.02f\n", accountnum, accountpin, accountbalance);
 
-		msg.data.accountnum = accountnum;
-		msg.data.accountpin = accountpin;
-		msg.data.funds = accountbalance;	
-		strcpy(msg.data.operations, "UPDATE_DB");
+		msg.accountnum = (unsigned int)accountnum;
+		msg.accountpin = accountpin;
+		msg.funds = accountbalance;	
+		strcpy(msg.operation, "UPDATE_DB");
 		msg.type = 1; 
 		if (msgsnd(msgid, &msg, sizeof(msg),0 ) == -1) {
 			perror("msgsnd");
@@ -76,6 +72,5 @@ int main() {
 
 	}
 
-	msgctl(msgid, IPC_RMID, NULL);
 
 }
